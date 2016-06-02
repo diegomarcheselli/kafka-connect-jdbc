@@ -94,50 +94,52 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         throw new ConnectException("Unknown mode encountered when preparing query: " + mode.toString());
     }
 
-    if (incrementingColumn != null && timestampColumn != null) {
-      // This version combines two possible conditions. The first checks timestamp == last
-      // timestamp and incrementing > last incrementing. The timestamp alone would include
-      // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
-      // get only the row with id = 23:
-      //  timestamp 1234, id 22 <- last
-      //  timestamp 1234, id 23
-      // The second check only uses the timestamp >= last timestamp. This covers everything new,
-      // even if it is an update of the existing row. If we previously had:
-      //  timestamp 1234, id 22 <- last
-      // and then these rows were written:
-      //  timestamp 1235, id 22
-      //  timestamp 1236, id 23
-      // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP AND ((");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" = ? AND ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(") OR ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ?)");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(",");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ? AND ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" ASC");
+    if (mode != QueryMode.QUERY) {
+      if (incrementingColumn != null && timestampColumn != null) {
+        // This version combines two possible conditions. The first checks timestamp == last
+        // timestamp and incrementing > last incrementing. The timestamp alone would include
+        // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
+        // get only the row with id = 23:
+        //  timestamp 1234, id 22 <- last
+        //  timestamp 1234, id 23
+        // The second check only uses the timestamp >= last timestamp. This covers everything new,
+        // even if it is an update of the existing row. If we previously had:
+        //  timestamp 1234, id 22 <- last
+        // and then these rows were written:
+        //  timestamp 1235, id 22
+        //  timestamp 1236, id 23
+        // We should capture both id = 22 (an update) and id = 23 (a new row)
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" < CURRENT_TIMESTAMP AND ((");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" = ? AND ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" > ?");
+        builder.append(") OR ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" > ?)");
+        builder.append(" ORDER BY ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(",");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" ASC");
+      } else if (incrementingColumn != null) {
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" > ?");
+        builder.append(" ORDER BY ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" ASC");
+      } else if (timestampColumn != null) {
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" > ? AND ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" < CURRENT_TIMESTAMP ORDER BY ");
+        builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+        builder.append(" ASC");
+      }
     }
     String queryString = builder.toString();
     log.debug("{} prepared SQL query: {}", this, queryString);
@@ -150,7 +152,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
       stmt.setTimestamp(1, ts, UTC_CALENDAR);
       stmt.setLong(2, (incrementingOffset == null ? -1 : incrementingOffset));
-      stmt.setTimestamp(3, ts, UTC_CALENDAR);
+      if (stmt.getParameterMetaData().getParameterCount() > 2) {
+        stmt.setTimestamp(3, ts, UTC_CALENDAR);
+      }
     } else if (incrementingColumn != null) {
       stmt.setLong(1, (incrementingOffset == null ? -1 : incrementingOffset));
     } else if (timestampColumn != null) {
