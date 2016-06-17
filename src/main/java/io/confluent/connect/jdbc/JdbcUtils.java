@@ -87,7 +87,8 @@ public class JdbcUtils {
    */
   public static List<String> getTables(Connection conn, Set<String> types) throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
-    ResultSet rs = metadata.getTables(null, null, "%", null);
+    String[] tableTypes = {"TABLE","VIEW"};
+    ResultSet rs = metadata.getTables(null, null, "%", tableTypes);
     List<String> tableNames = new ArrayList<String>();
     while (rs.next()) {
       if (types.contains(rs.getString(GET_TABLES_TYPE_COLUMN))) {
